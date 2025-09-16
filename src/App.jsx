@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 
 const routine = [
@@ -16,7 +17,8 @@ const routine = [
   { task: "Project / Portfolio (finish one small feature / write README / deploy)", type: "WebDev", time: "19:30" },
   { task: "Gym / Exercise (night session, mandatory)", type: "Exercise", time: "20:30" },
   { task: "Revision + Notes", type: "Study", time: "22:30" },
-  { task: "Night routine / prepare for bed", type: "Night", time: "23:00" }
+  { task: "Tell everything to my friend with proof (voice note / screenshots)", type: "Accountability", time: "22:50" },
+{ task: "Night routine / prepare for bed", type: "Night", time: "23:00" }
 ];
 
 const motivationalQuotes = [
@@ -24,7 +26,9 @@ const motivationalQuotes = [
   "Small progress is still progress.",
   "Discipline is the bridge between goals and accomplishment.",
   "Push yourself, because no one else will.",
-  "The pain you feel today will be your strength tomorrow"
+  "The pain you feel today will be your strength tomorrow",
+  "One hour of focus is worth ten hours of regret later",
+  "Stop scrolling. Start building."
 ];
 
 const DAILY_THRESHOLD = 0.7;
@@ -32,7 +36,6 @@ const DAILY_THRESHOLD = 0.7;
 export default function HardcoreDisciplineTracker() {
   const today = new Date();
   const dayIndex = today.getDay();
-  
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - dayIndex + 1); // Monday as start
   const weekKey = `routine-week-${weekStart.toISOString().slice(0,10)}`;
@@ -57,10 +60,14 @@ export default function HardcoreDisciplineTracker() {
     return count;
   };
 
+  // Save state, handle streaks, reset week
   useEffect(() => {
+    if (Notification.permission !== "granted") {
+      Notification.requestPermission();
+    }
+
     let weekData = JSON.parse(localStorage.getItem(weekKey)) || {};
 
-    // Strict enforcement: reset if yesterday < threshold
     const yesterdayIndex = dayIndex === 0 ? 6 : dayIndex - 1;
     const yesterday = weekData[yesterdayIndex] || {};
     const yesterdayCompleted = Object.values(yesterday).filter(Boolean).length / routine.length;
@@ -68,37 +75,94 @@ export default function HardcoreDisciplineTracker() {
     if (yesterdayIndex in weekData && yesterdayCompleted < DAILY_THRESHOLD) {
       localStorage.removeItem(weekKey);
       setCompleted({});
+      setStreak(0);
       alert("You missed yesterday! Week reset to build hardcore discipline. 💪");
       weekData = {};
     }
 
-    // Save today
     weekData[dayIndex] = completed;
     localStorage.setItem(weekKey, JSON.stringify(weekData));
     setStreak(computeStreak(weekData));
 
-    // Badges
     const newBadges = [];
     const currentStreak = computeStreak(weekData);
     if (currentStreak >= 3) newBadges.push("🔥 3-day streak");
     if (currentStreak >= 5) newBadges.push("🏆 5-day streak");
     if (currentStreak >= 7) newBadges.push("💎 7-day streak");
     setBadges(newBadges);
-
   }, [completed, dayIndex, weekKey]);
 
   const toggleCheck = (index) => {
-    const now = new Date();
-    const taskHour = parseInt(routine[index].time.split(":")[0], 10);
-    const taskMinute = parseInt(routine[index].time.split(":")[1], 10);
+  const now = new Date();
+  const [taskHour, taskMinute] = routine[index].time.split(":").map(Number);
 
-    // Warn if checking after scheduled time
-    if (now.getHours() > taskHour || (now.getHours() === taskHour && now.getMinutes() > taskMinute)) {
-      if (!window.confirm("You're checking this task after its scheduled time. Are you sure?")) return;
+  // Task start time
+  const taskStart = new Date();
+  taskStart.setHours(taskHour, taskMinute, 0, 0);
+
+  // Task end time = next task start (or 23:59 if last task)
+  let taskEnd;
+  if (index < routine.length - 1) {
+    const [nextHour, nextMinute] = routine[index + 1].time.split(":").map(Number);
+    taskEnd = new Date();
+    taskEnd.setHours(nextHour, nextMinute, 0, 0);
+  } else {
+    taskEnd = new Date();
+    taskEnd.setHours(23, 59, 59, 999);
+  }
+
+  // Last 10 minutes window
+  const last10Min = new Date(taskEnd.getTime() - 10 * 60 * 1000);
+
+  if (now < last10Min) {
+    alert("Too early! You can only mark this task in the last 10 minutes of its duration. ⏳");
+    return;
+  }
+
+  if (now > taskEnd) {
+    alert("Too late! You missed this task. ⛔");
+    return;
+  }
+
+  setCompleted({ ...completed, [index]: !completed[index] });
+};
+
+
+
+  // Schedule notifications
+  useEffect(() => {
+    const timers = [];
+
+    routine.forEach((task, index) => {
+      const [hour, minute] = task.time.split(":").map(Number);
+      const now = new Date();
+      const taskTime = new Date();
+      taskTime.setHours(hour, minute, 0, 0);
+
+      let delay = taskTime.getTime() - now.getTime();
+      if (delay < 0) delay = 0;
+
+      const timer = setTimeout(() => {
+        if (Notification.permission === "granted") {
+          new Notification("Task Reminder ⏰", { body: task.task });
+        }
+      }, delay);
+      timers.push(timer);
+    });
+
+    for (let i = 0; i < 4; i++) {
+      const randomDelay = Math.floor(Math.random() * 12 * 60 * 60 * 1000); // 12 hours
+      const timer = setTimeout(() => {
+        if (Notification.permission === "granted") {
+          const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+          new Notification("Motivation 💪", { body: randomQuote });
+        }
+      }, randomDelay);
+      timers.push(timer);
     }
 
-    setCompleted({ ...completed, [index]: !completed[index] });
-  };
+    return () => timers.forEach(t => clearTimeout(t));
+  }, []);
 
   const completedCount = Object.values(completed).filter(Boolean).length;
   const progress = Math.round((completedCount / routine.length) * 100);
@@ -147,7 +211,7 @@ export default function HardcoreDisciplineTracker() {
           background: "#FFD700",
           border: "none",
           color: "#1E1E2F",
-          padding: "10px 20px",
+                    padding: "10px 20px",
           borderRadius: "8px",
           cursor: "pointer",
           fontWeight: "bold",
@@ -159,51 +223,49 @@ export default function HardcoreDisciplineTracker() {
 
       {weeklySummary && (
         <div style={{ marginBottom: "20px", textAlign: "center" }}>
-          <h3 style={{ color: "#00FFAB" }}>🌟 Weekly Progress</h3>
-          <p>{weeklyProgress}% tasks completed this week</p>
-          <p>Check your discipline and consistency! 💪</p>
+          <h3 style={{ color: "#00FFAB" }}>📊 Weekly Summary</h3>
+          <p>Overall weekly progress: {weeklyProgress}%</p>
+          {Object.keys(weekData).map(day => {
+            const dayTasks = weekData[day] || {};
+            const dayCompleted = Object.values(dayTasks).filter(Boolean).length;
+            return (
+              <p key={day}>Day {parseInt(day) + 1}: {dayCompleted}/{routine.length} tasks done</p>
+            );
+          })}
         </div>
       )}
 
-      <ul style={{ listStyle: "none", padding: 0 }}>
-        {routine.map((taskObj, index) => {
-          const now = new Date();
-          const taskHour = parseInt(taskObj.time.split(":")[0], 10);
-          const taskMinute = parseInt(taskObj.time.split(":")[1], 10);
-          const isLate = now.getHours() > taskHour || (now.getHours() === taskHour && now.getMinutes() > taskMinute);
-
-          return (
-            <li key={index} style={{ marginBottom: "14px" }}>
-              <label style={{
-                display: "flex",
-                alignItems: "center",
+      <div>
+        {routine.map((item, index) => (
+          <div key={index} style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "10px",
+            marginBottom: "8px",
+            background: completed[index] ? "#00FFAB33" : "#222",
+            borderRadius: "8px"
+          }}>
+            <div>
+              <strong>{item.time}</strong> - {item.task}
+            </div>
+            <button
+              onClick={() => toggleCheck(index)}
+              style={{
+                background: completed[index] ? "#FFD700" : "#00FFAB",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: "6px",
                 cursor: "pointer",
-                padding: "12px",
-                borderRadius: "10px",
-                background: completed[index] ? "#00FFAB20" : isLate ? "#FF000020" : "#2A2A3C",
-                transition: "background 0.3s, transform 0.2s"
+                color: "#111"
               }}
-              onMouseEnter={e => e.currentTarget.style.transform = "scale(1.02)"}
-              onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
-                <input
-                  type="checkbox"
-                  checked={completed[index] || false}
-                  onChange={() => toggleCheck(index)}
-                  style={{ marginRight: "15px", transform: "scale(1.3)", accentColor: "#FFD700" }}
-                />
-                <span style={{
-                  textDecoration: completed[index] ? "line-through" : "none",
-                  flex: 1,
-                  color: isLate && !completed[index] ? "#FF5555" : "#F5F5F5"
-                }}>
-                  {taskObj.time} — {taskObj.task}
-                  {isLate && !completed[index] && " ⏰ Late!"}
-                </span>
-              </label>
-            </li>
-          )
-        })}
-      </ul>
+            >
+              {completed[index] ? "✔ Done" : "Mark"}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
+
