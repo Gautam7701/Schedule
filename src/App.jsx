@@ -18,7 +18,7 @@ const routine = [
   { task: "Project / Portfolio (finish one small feature / write README / deploy)", type: "WebDev", time: "19:30" },
   { task: "Gym / Exercise (night session, mandatory)", type: "Exercise", time: "20:30" },
   { task: "Revision + Notes", type: "Study", time: "22:30" },
-  { task: "Tell everything to my Diksha with proof (voice note / screenshots)", type: "Accountability", time: "22:50" },
+  { task: "Tell everything to Diksha with proof (voice note / screenshots)", type: "Accountability", time: "22:50" },
   { task: "Night routine / prepare for bed", type: "Night", time: "23:00" }
 ];
 
